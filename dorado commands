@@ -35,4 +35,5 @@ samtools view -b -h -N barcode_11_reads.txt -o filtered_barcode11_output.bam new
 remora dataset prepare barcode10.pod5 filtered_barcode10_output.bam --output-path barcode10_chunks_new --refine-kmer-level-table 9mer_levels_v1.txt --refine-rough-rescale --mod-base CEG 0 --motif GTTNNNGNNNACG 6
 remora dataset prepare barcode11.pod5 filtered_barcode10_output.bam --output-path barcode11_chunks_new --refine-kmer-level-table 9mer_levels_v1.txt --refine-rough-rescale --mod-base CEG 0 --motif GTTNNNGNNNACG 6
 
-
+### barcode 10 error: [15:16:41.624] Unsuccessful read/chunk reasons: 298,086 : Unmapped read
+### barcode 11 does not have an error but rather: Found signal in POD5 for 0.00% of BAM records.
