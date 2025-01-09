@@ -1,8 +1,38 @@
-# getting aligned basecalls
+# Perform basecalling with alignment
 
 ./dorado basecaller dna_r10.4.1_e8.2_400bps_hac@v5.0.0 |
 /dartfs-hpc/rc/lab/M/McKennaLab/projects/Dana/ganciclovir_base_calling/RawData/2024_04_30_Gan_barcode10_wt_barcode11BC2/20240430_1652_P2S-00525-A_PAO86531_66463990/pod5/ |
 --kit-name SQK-PCB114-24 |
 --reference oligo_fasta.fa > newaligned.bam
 
-  
+
+#Perform read splitting
+
+samtools view newaligned.bam | grep SQK-PCB114.24_barcode10 | cut -f1 -d$'\t' > barcode_10_reads.txt
+samtools view newaligned.bam | grep SQK-PCB114.24_barcode11 | cut -f1 -d$'\t' > barcode_11_reads.txt
+
+#Get pod5 files
+
+pod5 filter 
+/dartfs-hpc/rc/lab/M/McKennaLab/projects/Dana/ganciclovir_base_calling/RawData/2024_04_30_Gan_barcode10_wt_barcode11BC2/20240430_1652_P2S-00525-A_PAO86531_66463990/pod5/ 
+--output barcode10.pod5 
+--ids /dartfs-hpc/rc/lab/M/McKennaLab/projects/Dana/ganciclovir_base_calling/dorado-0.8.1-linux-x64/bin/new_stuff/barcode_10_reads.txt 
+--missing-ok
+
+pod5 filter 
+/dartfs-hpc/rc/lab/M/McKennaLab/projects/Dana/ganciclovir_base_calling/RawData/2024_04_30_Gan_barcode10_wt_barcode11BC2/20240430_1652_P2S-00525-A_PAO86531_66463990/pod5/ 
+--output barcode11.pod5 
+--ids /dartfs-hpc/rc/lab/M/McKennaLab/projects/Dana/ganciclovir_base_calling/dorado-0.8.1-linux-x64/bin/new_stuff/barcode_11_reads.txt 
+--missing-ok
+
+#Filter for barcode bam files
+
+samtools view -b -h -N barcode_10_reads.txt -o filtered_barcode10_output.bam newaligned.bam
+samtools view -b -h -N barcode_11_reads.txt -o filtered_barcode11_output.bam newaligned.bam
+
+#Create chunks
+
+remora dataset prepare barcode10.pod5 filtered_barcode10_output.bam --output-path barcode10_chunks_new --refine-kmer-level-table 9mer_levels_v1.txt --refine-rough-rescale --mod-base CEG 0 --motif GTTNNNGNNNACG 6
+remora dataset prepare barcode11.pod5 filtered_barcode10_output.bam --output-path barcode11_chunks_new --refine-kmer-level-table 9mer_levels_v1.txt --refine-rough-rescale --mod-base CEG 0 --motif GTTNNNGNNNACG 6
+
+
