@@ -1,0 +1,7 @@
+#Download reference genomes
+wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
+gunzip hg38.fa.gz
+wget https://www.ncbi.nlm.nih.gov/nuccore/X17403.1?report=fasta
+
+#Concatenate reference genomes
+cat hg38.fa cmv.fa > combined.fa
