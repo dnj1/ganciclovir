@@ -1,7 +1,58 @@
 #Download reference genomes
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
 gunzip hg38.fa.gz
-wget https://www.ncbi.nlm.nih.gov/nuccore/X17403.1?report=fasta
+wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=X17403.1&rettype=fasta&retmode=text" -O cmv.fa
 
 #Concatenate reference genomes
 cat hg38.fa cmv.fa > combined.fa
+
+#Index the reference with minimap2
+minimap2 -d combined.mmi combined.fa
+
+#Align each sample to the combined reference (from fastq_pass directory)
+cd /dartfs/rc/lab/M/McKennaLab/data/nanopore/2025-7-10-cmv-blood/2025-7-10-cmv-blood/20250710_1757_P2S-00525-A_PBC44707_e9e892f5/fastq_pass
+
+for barcode_dir in barcode*/; do
+    sample=$(basename "$barcode_dir")
+    fastq_file=$(find "$barcode_dir" -name "*.fastq.gz" | head -n 1)
+
+    if [[ ! -f "$fastq_file" ]]; then
+        echo "No FASTQ file found in $barcode_dir, skipping..."
+        continue
+    fi
+
+    sam_file="${sample}.sam"
+    bam_file="${sample}.bam"
+    sorted_bam="${sample}.sorted.bam"
+
+    echo "Aligning $fastq_file..."
+
+    minimap2 -ax map-ont \
+      /dartfs/rc/lab/M/McKennaLab/projects/Dana/bloodsamples/combined.mmi \
+      "$fastq_file" > "$sam_file"
+
+    samtools view -Sb "$sam_file" > "$bam_file"
+    samtools sort "$bam_file" -o "$sorted_bam"
+    samtools index "$sorted_bam"
+
+    rm "$sam_file" "$bam_file"
+done
+
+#Check alignment quality and stats
+for bam in barcode*.sorted.bam; do
+  echo "Stats for $bam:"
+  samtools flagstat "$bam"
+  echo
+done
+
+#Extract CMV-specific reads
+for bam in barcode*.sorted.bam; do
+  sample=${bam%.sorted.bam}
+  samtools view -b "$bam" "X17403.1" > "${sample}.cmv.bam"
+  samtools index "${sample}.cmv.bam"
+done
+
+
+
+
+
