@@ -1,15 +1,15 @@
-#Download reference genomes
+##Download reference genomes
 wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
 gunzip hg38.fa.gz
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=X17403.1&rettype=fasta&retmode=text" -O cmv.fa
 
-#Concatenate reference genomes
+##Concatenate reference genomes
 cat hg38.fa cmv.fa > combined.fa
 
-#Index the reference with minimap2
+##Index the reference with minimap2
 minimap2 -d combined.mmi combined.fa
 
-#Align each sample to the combined reference (from fastq_pass directory)
+##Align each sample to the combined reference (from fastq_pass directory)
 cd /dartfs/rc/lab/M/McKennaLab/data/nanopore/2025-7-10-cmv-blood/2025-7-10-cmv-blood/20250710_1757_P2S-00525-A_PBC44707_e9e892f5/fastq_pass
 
 for barcode_dir in barcode*/; do
@@ -38,19 +38,53 @@ for barcode_dir in barcode*/; do
     rm "$sam_file" "$bam_file"
 done
 
-#Check alignment quality and stats
+##Check alignment quality and stats
 for bam in barcode*.sorted.bam; do
   echo "Stats for $bam:"
   samtools flagstat "$bam"
   echo
 done
 
-#Extract CMV-specific reads
+##Extract CMV-specific reads
 for bam in barcode*.sorted.bam; do
   sample=${bam%.sorted.bam}
   samtools view -b "$bam" "X17403.1" > "${sample}.cmv.bam"
   samtools index "${sample}.cmv.bam"
 done
+
+##Quick check
+samtools view -c barcode01.sorted.bam "X17403.1"
+#All contig counts
+samtools idxstats barcode01.sorted.bam
+
+##Generate CMV read counts report
+#!/bin/bash
+
+# Define CMV contig name exactly as in your reference
+CMV_CONTIG="X17403.1"
+
+# Output file for the report
+REPORT="cmv_read_counts_report.txt"
+
+# Header for report
+echo -e "Sample\tCMV_Read_Counts" > "$REPORT"
+
+# Loop over all BAM files
+for bam in barcode*.sorted.bam; do
+  sample=${bam%.sorted.bam}
+  # Count reads mapped to CMV contig
+  count=$(samtools view -c "$bam" "$CMV_CONTIG")
+  echo -e "${sample}\t${count}" >> "$REPORT"
+done
+
+echo "Report saved to $REPORT"
+
+##Realign to CMV only
+minimap2 -d cmv_only.mmi cmv.fa
+minimap2 -ax map-ont cmv_only.mmi barcode01 | samtools sort -o barcode01.cmvonly.sorted.bam
+samtools index barcode01.cmvonly.sorted.bam
+samtools idxstats barcode01.cmvonly.sorted.bam
+
 
 
 
