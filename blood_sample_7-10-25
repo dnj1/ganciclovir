@@ -86,7 +86,91 @@ samtools index barcode01.cmvonly.sorted.bam
 samtools idxstats barcode01.cmvonly.sorted.bam
 
 
+##Check fastq_fail reads for CMV
+# Define reference and base path
+REF_MMI=/dartfs/rc/lab/M/McKennaLab/projects/Dana/bloodsamples/combined.mmi
+FASTQ_FAIL_BASE=/dartfs/rc/lab/M/McKennaLab/data/nanopore/2025-7-10-cmv-blood/2025-7-10-cmv-blood/20250710_1757_P2S-00525-A_PBC44707_e9e892f5/fastq_fail
+OUTPUT_DIR="$FASTQ_FAIL_BASE/aligned_fastq_fail"
 
+# Create central output directory
+mkdir -p "$OUTPUT_DIR"
+
+# Loop over barcode folders
+for barcode_dir in "$FASTQ_FAIL_BASE"/barcode*; do
+  barcode_name=$(basename "$barcode_dir")
+  fq_path="$barcode_dir"/*.fastq.gz
+
+  # Skip if no FASTQ found
+  if compgen -G "$fq_path" > /dev/null; then
+    echo "Aligning $barcode_name..."
+
+    minimap2 -ax map-ont "$REF_MMI" $fq_path \
+      | samtools sort -o "$OUTPUT_DIR/${barcode_name}.sorted.bam"
+
+    samtools index "$OUTPUT_DIR/${barcode_name}.sorted.bam"
+  else
+    echo "No FASTQ found in $barcode_dir — skipping."
+  fi
+done
+
+##Count CMV-aligned reads
+# Define variables
+ALIGN_DIR=/dartfs/rc/lab/M/McKennaLab/data/nanopore/2025-7-10-cmv-blood/2025-7-10-cmv-blood/20250710_1757_P2S-00525-A_PBC44707_e9e892f5/fastq_fail/aligned_fastq_fail
+CMV_CONTIG="X17403.1"
+OUTFILE="$ALIGN_DIR/cmv_read_counts.tsv"
+
+# Write header
+echo -e "Barcode\tCMV_Reads" > "$OUTFILE"
+
+# Loop over each BAM file
+for bam in "$ALIGN_DIR"/barcode*.sorted.bam; do
+  barcode=$(basename "$bam" .sorted.bam)
+
+  # Count reads aligned to the CMV contig
+  count=$(samtools view -c "$bam" "$CMV_CONTIG")
+
+  # Append result to output file
+  echo -e "$barcode\t$count" >> "$OUTFILE"
+done
+
+echo "CMV read counts written to: $OUTFILE"
+
+##Now look at unclassified reads
+# Reference
+REF_MMI=/dartfs/rc/lab/M/McKennaLab/projects/Dana/bloodsamples/combined.mmi
+CMV_CONTIG="X17403.1"
+
+# Input/output
+UNCLASSIFIED_DIR=/dartfs/rc/lab/M/McKennaLab/data/nanopore/2025-7-10-cmv-blood/2025-7-10-cmv-blood/20250710_1757_P2S-00525-A_PBC44707_e9e892f5/fastq_fail/unclassified
+OUTPUT_DIR="$UNCLASSIFIED_DIR/aligned_unclassified"
+mkdir -p "$OUTPUT_DIR"
+
+# Loop through fastq.gz files in the unclassified directory
+for fq in "$UNCLASSIFIED_DIR"/*.fastq.gz; do
+  sample=$(basename "$fq" .fastq.gz)
+
+  echo "Aligning unclassified reads: $sample"
+
+  minimap2 -ax map-ont "$REF_MMI" "$fq" \
+    | samtools sort -o "$OUTPUT_DIR/${sample}.sorted.bam"
+
+  samtools index "$OUTPUT_DIR/${sample}.sorted.bam"
+done
+
+# Output file for counts
+COUNT_TABLE="$OUTPUT_DIR/cmv_read_counts_unclassified.tsv"
+echo -e "Sample\tCMV_Reads" > "$COUNT_TABLE"
+
+# Loop through BAM files and count reads aligning to CMV
+for bam in "$OUTPUT_DIR"/*.sorted.bam; do
+  sample=$(basename "$bam" .sorted.bam)
+
+  count=$(samtools view -c "$bam" "$CMV_CONTIG")
+
+  echo -e "$sample\t$count" >> "$COUNT_TABLE"
+done
+
+echo "CMV read counts written to: $COUNT_TABLE"
 
 
 
