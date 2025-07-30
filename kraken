@@ -1,1 +1,106 @@
- grep -w "10359" classified_read_summary.tsv
+conda create -n kraken2-env -c bioconda kraken2 -y
+conda activate kraken2-env
+
+kraken2-build --db kraken2_viruses --download-taxonomy --threads 8
+kraken2-build --db kraken2_viruses --download-library viral
+kraken2-build --db kraken2_viruses --build --threads 8
+kraken2-build --db kraken2_viruses --download-library viral
+kraken2-build --db kraken2_viruses --build --threads 8
+
+kraken2-build --db kraken2_viruses --download-taxonomy --threads 8 | kraken2-build --db kraken2_viruses --download-library viral | kraken2-build --db kraken2_viruses --build --threads 8 
+
+mkdir -p ~/kraken2_viruses
+cd ~/kraken2_viruses
+
+wget https://genome-idx.s3.amazonaws.com/kraken/k2_viral_20210517.tar.gz
+tar -xvzf k2_viral_20210517.tar.gz
+
+mkdir -p ~/kraken2_outputs
+
+nano run_kraken2_all.sh
+#!/bin/bash
+
+# Path to your Kraken2 DB
+KRAKEN_DB=~/kraken2_viruses
+
+# Output directory for Kraken2 results
+OUT_DIR=~/kraken2_outputs
+mkdir -p "$OUT_DIR"
+
+# Base path for your data
+DATA_DIR=/dartfs/rc/lab/M/McKennaLab/data/nanopore/2025-7-10-cmv-blood/2025-7-10-cmv-blood/20250710_1757_P2S-00525-A_PBC44707_e9e892f5
+
+# Find all fastq.gz files under fastq_pass, fastq_fail, and unclassified
+find "$DATA_DIR/fastq_pass" "$DATA_DIR/fastq_fail" "$DATA_DIR/fastq_fail/unclassified" -name "*.fastq.gz" | while read fq; do
+    sample=$(basename "$fq" .fastq.gz)
+    echo "Classifying $sample..."
+    
+    kraken2 \
+      --db "$KRAKEN_DB" \
+      --threads 8 \
+      --report "$OUT_DIR/${sample}_kraken2_report.txt" \
+      --output "$OUT_DIR/${sample}_kraken2_output.txt" \
+      "$fq"
+done
+
+chmod +x run_kraken2_all.sh
+
+./run_kraken2_all.sh
+
+nano summarize_cmv.sh
+
+#!/bin/bash
+
+# Output file
+SUMMARY_FILE=cmv_summary.tsv
+echo -e "Sample\tCMV_Reads\tCMV_Percent" > "$SUMMARY_FILE"
+
+# Loop through all Kraken2 reports
+for report in ~/kraken2_outputs/*_kraken2_report.txt; do
+    sample=$(basename "$report" _kraken2_report.txt)
+    
+    # Try to find CMV entry
+    cmv_line=$(grep "Human herpesvirus 5" "$report")
+    
+    if [[ -n "$cmv_line" ]]; then
+        cmv_reads=$(echo "$cmv_line" | awk '{print $2}')
+        cmv_percent=$(echo "$cmv_line" | awk '{print $1}')
+    else
+        cmv_reads=0
+        cmv_percent=0.00
+    fi
+
+    echo -e "${sample}\t${cmv_reads}\t${cmv_percent}" >> "$SUMMARY_FILE"
+done
+
+chmod +x summarize_cmv.sh
+
+column -t cmv_summary.tsv
+
+nano inspect_classified_reads.sh
+
+#!/bin/bash
+
+# Output file
+OUTFILE=classified_read_summary.tsv
+echo -e "Sample\tTaxon\tRead_Count" > "$OUTFILE"
+
+# Loop through all kraken2 output files
+for file in ~/kraken2_outputs/*_kraken2_output.txt; do
+    sample=$(basename "$file" _kraken2_output.txt)
+    
+    # Extract taxon names from classified reads (lines starting with 'C')
+    awk '$1 == "C" {print $3}' "$file" | sort | uniq -c | sort -nr | while read count taxon; do
+        echo -e "${sample}\t${taxon}\t${count}" >> "$OUTFILE"
+    done
+done
+
+chmod +x inspect_classified_reads.sh
+
+./inspect_classified_reads.sh
+
+column -t classified_read_summary.tsv
+
+grep -w "10359" classified_read_summary.tsv
+
+
